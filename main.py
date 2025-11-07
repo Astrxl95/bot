@@ -496,42 +496,34 @@ async def warns_cmd(interaction: discord.Interaction, user: discord.Member):
     await interaction.response.send_message(embed=embed, ephemeral=True)
 
 
-# ---------------------- NOUVELLE COMMANDE /embed ----------------------
-@tree.command(
-    name="embed",
-    description="Envoie un embed personnalisé (Fondateur/Admin uniquement)")
-@app_commands.describe(
-    channel="Salon où envoyer l'embed",
-    titre="Titre de l'embed",
-    contenu="Contenu de l'embed",
-    couleur="Couleur en hex (ex: #ff0000) ou nom (red, blue...)")
-async def embed_cmd(interaction: discord.Interaction,
-                    channel: discord.TextChannel,
-                    titre: str,
-                    contenu: str,
-                    couleur: str = "default"):
-    # Gérer la couleur
+# --- /embed (avec preview) ---
+@bot.tree.command(name="embed", description="Créer un embed personnalisé avec preview avant envoi")
+@app_commands.describe(title="Titre de l'embed", description="Contenu de l'embed", color_hex="Couleur (hex, ex: #ff0000)")
+async def embed(interaction: discord.Interaction, title: str, description: str, color_hex: str = "#00ffcc"):
     try:
-        if couleur.startswith("#"):
-            color = discord.Color(int(couleur.lstrip("#"), 16))
-        elif couleur.lower() in [
-                "red", "blue", "green", "yellow", "purple", "orange", "pink"
-        ]:
-            color = getattr(discord.Color, couleur.lower())()
-        else:
-            color = discord.Color.default()
-    except:
-        color = discord.Color.default()
+        color = discord.Color(int(color_hex.replace("#", ""), 16))
+    except ValueError:
+        color = discord.Color.blue()
 
-    embed = discord.Embed(title=titre, description=contenu, color=color)
-    embed.set_footer(text=f"Envoyé par {interaction.user}",
-                     icon_url=interaction.user.avatar.url
-                     if interaction.user.avatar else None)
+    preview = discord.Embed(title=title, description=description, color=color)
+    await interaction.response.send_message("📝 **Prévisualisation de ton embed :**", embed=preview, ephemeral=True)
 
-    await channel.send(embed=embed)
-    await interaction.response.send_message(
-        f"Embed envoyé dans {channel.mention}", ephemeral=True)
+    view = discord.ui.View()
+    view.add_item(discord.ui.Button(label="Envoyer", style=discord.ButtonStyle.green, custom_id="send"))
+    view.add_item(discord.ui.Button(label="Annuler", style=discord.ButtonStyle.red, custom_id="cancel"))
 
+    async def callback(inter):
+        if inter.data["custom_id"] == "send":
+            await inter.response.send_message("✅ Embed envoyé !", ephemeral=True)
+            await interaction.channel.send(embed=preview)
+        elif inter.data["custom_id"] == "cancel":
+            await inter.response.send_message("❌ Envoi annulé.", ephemeral=True)
+        view.stop()
+
+    for child in view.children:
+        child.callback = callback
+
+    await interaction.followup.send("Souhaites-tu envoyer cet embed ?", view=view, ephemeral=True)
 
 # ---------------------- ERREURS ----------------------
 @tree.error
